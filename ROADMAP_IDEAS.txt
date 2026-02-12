@@ -3,4 +3,6 @@ DocAtlas Roadmap Ideas
 
 - Add a "simple mode" that skips content analysis and sorts files using only
   filename and file type (extension).
-
+- In simple mode, run a routine check to sort; sorting rules are defined by the
+  user (like Application + Categories).
+- Include folder size reporting and an optional delete action.
