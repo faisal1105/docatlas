@@ -1192,9 +1192,9 @@ def get_ocrmypdf_gui() -> bool:
     return result[0] if result else True
 
 
-def get_embeddings_source_gui() -> Tuple[str, bool, bool]:
+def get_embeddings_source_gui() -> Tuple[str, bool]:
     if tk is None:
-        return DEFAULT_EMBEDDINGS_SOURCE, True, False
+        return DEFAULT_EMBEDDINGS_SOURCE, True
     root = tk.Tk()
     root.title("DocAtlas - Embeddings Source")
     root.geometry("560x300")
@@ -1202,7 +1202,6 @@ def get_embeddings_source_gui() -> Tuple[str, bool, bool]:
 
     var = tk.StringVar(value=DEFAULT_EMBEDDINGS_SOURCE)
     append_var = tk.BooleanVar(value=True)
-    charter_mode_var = tk.BooleanVar(value=False)
     container = tk.Frame(root, bg=THEME["bg"])
     container.pack(fill=tk.BOTH, expand=True, padx=16, pady=16)
 
@@ -1257,20 +1256,11 @@ def get_embeddings_source_gui() -> Tuple[str, bool, bool]:
         font=FONT_LABEL,
     )
     chk.pack(anchor="w", pady=(8, 4))
-    chk_charter = tk.Checkbutton(
-        container,
-        text="Charter Mode (summarize, tag, detect duplicates; no file moves)",
-        variable=charter_mode_var,
-        bg=THEME["bg"],
-        fg=THEME["fg"],
-        font=FONT_LABEL,
-    )
-    chk_charter.pack(anchor="w", pady=(0, 4))
 
-    result: List[Tuple[str, bool, bool]] = []
+    result: List[Tuple[str, bool]] = []
 
     def on_ok() -> None:
-        result.append((var.get(), bool(append_var.get()), bool(charter_mode_var.get())))
+        result.append((var.get(), bool(append_var.get())))
         root.destroy()
 
     btn_frame = tk.Frame(container, bg=THEME["bg"])
@@ -1279,7 +1269,66 @@ def get_embeddings_source_gui() -> Tuple[str, bool, bool]:
         side=tk.RIGHT, padx=8, ipady=4
     )
     root.mainloop()
-    return result[0] if result else (DEFAULT_EMBEDDINGS_SOURCE, True, False)
+    return result[0] if result else (DEFAULT_EMBEDDINGS_SOURCE, True)
+
+
+def get_run_mode_gui() -> bool:
+    if tk is None:
+        return True
+    root = tk.Tk()
+    root.title("DocAtlas - Run Mode")
+    root.geometry("560x300")
+    apply_theme(root)
+
+    var = tk.StringVar(value="charter")
+    container = tk.Frame(root, bg=THEME["bg"])
+    container.pack(fill=tk.BOTH, expand=True, padx=16, pady=16)
+
+    label = tk.Label(container, text="Run Mode", bg=THEME["bg"], fg=THEME["fg"], font=FONT_HEADER)
+    label.pack(anchor="w", pady=(0, 6))
+    sub = tk.Label(
+        container,
+        text="Choose how to run this job.",
+        bg=THEME["bg"],
+        fg=THEME["muted"],
+        font=FONT_SMALL,
+    )
+    sub.pack(anchor="w", pady=(0, 12))
+
+    tk.Radiobutton(
+        container,
+        text="Charter Mode (summaries, tags, duplicates; no file moves)",
+        variable=var,
+        value="charter",
+        bg=THEME["bg"],
+        fg=THEME["fg"],
+        selectcolor=THEME["panel"],
+        font=FONT_LABEL,
+    ).pack(anchor="w", pady=4)
+    tk.Radiobutton(
+        container,
+        text="Atlas Mode (summaries, tags, duplicates; move files)",
+        variable=var,
+        value="atlas",
+        bg=THEME["bg"],
+        fg=THEME["fg"],
+        selectcolor=THEME["panel"],
+        font=FONT_LABEL,
+    ).pack(anchor="w", pady=4)
+
+    result: List[bool] = []
+
+    def on_ok() -> None:
+        result.append(var.get() == "charter")
+        root.destroy()
+
+    btn_frame = tk.Frame(container, bg=THEME["bg"])
+    btn_frame.pack(pady=12, anchor="e", fill=tk.X)
+    tk.Button(btn_frame, text="OK", command=on_ok, width=12, bg=THEME["accent"], fg="#ffffff", relief=tk.FLAT, height=1, font=FONT_BUTTON).pack(
+        side=tk.RIGHT, padx=8, ipady=4
+    )
+    root.mainloop()
+    return result[0] if result else True
 
 
 def edit_applications_gui(config_path: Path, app_config: Dict[str, List[str]], parent: tk.Tk) -> None:
@@ -2766,7 +2815,8 @@ def main() -> int:
         input_dir, output_dir = pick_directories_gui()
         categories, app_name = get_categories_gui(app_config, config_path)
         ocrmypdf_enabled = get_ocrmypdf_gui()
-        embeddings_source, append_excel, gui_charter_mode = get_embeddings_source_gui()
+        embeddings_source, append_excel = get_embeddings_source_gui()
+        gui_charter_mode = get_run_mode_gui()
         if gui_charter_mode:
             args.no_move = True
 
