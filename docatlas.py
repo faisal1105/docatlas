@@ -1272,7 +1272,7 @@ def get_embeddings_source_gui() -> Tuple[str, bool]:
     return result[0] if result else (DEFAULT_EMBEDDINGS_SOURCE, True)
 
 
-def get_run_mode_gui() -> bool:
+def get_run_mode_gui() -> Optional[bool]:
     if tk is None:
         return True
     root = tk.Tk()
@@ -1316,11 +1316,17 @@ def get_run_mode_gui() -> bool:
         font=FONT_LABEL,
     ).pack(anchor="w", pady=4)
 
-    result: List[bool] = []
+    result: List[Optional[bool]] = []
 
     def on_ok() -> None:
         result.append(var.get() == "charter")
         root.destroy()
+
+    def on_close() -> None:
+        result.append(None)
+        root.destroy()
+
+    root.protocol("WM_DELETE_WINDOW", on_close)
 
     btn_frame = tk.Frame(container, bg=THEME["bg"])
     btn_frame.pack(pady=12, anchor="e", fill=tk.X)
@@ -2817,6 +2823,8 @@ def main() -> int:
         ocrmypdf_enabled = get_ocrmypdf_gui()
         embeddings_source, append_excel = get_embeddings_source_gui()
         gui_charter_mode = get_run_mode_gui()
+        if gui_charter_mode is None:
+            return 0
         if gui_charter_mode:
             args.no_move = True
 
