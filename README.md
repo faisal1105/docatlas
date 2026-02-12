@@ -1,7 +1,7 @@
 # DocAtlas
 — DocAtlas —
 
-DocAtlas is a CLI + GUI tool to extract content from PDFs/DOCX/PPTX/XLSX, summarize, categorize, tag, detect duplicates, and organize files into category folders.
+DocAtlas is a CLI + GUI tool to extract content from PDFs/DOC/DOCX/PPTX/XLSX, summarize, categorize, tag, detect duplicates, and organize files into category folders.
 
 ## Quick Start (Windows)
 1. Install Python (3.10+).
