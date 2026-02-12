@@ -1259,7 +1259,7 @@ def get_embeddings_source_gui() -> Tuple[str, bool, bool]:
     chk.pack(anchor="w", pady=(8, 4))
     chk_charter = tk.Checkbutton(
         container,
-        text="Charter Mode (preview only; do not move files)",
+        text="Charter Mode (summarize, tag, detect duplicates; no file moves)",
         variable=charter_mode_var,
         bg=THEME["bg"],
         fg=THEME["fg"],
