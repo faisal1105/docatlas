@@ -1,0 +1,57 @@
+DocAtlas Pipeline Overview
+==========================
+
+1) Discover & validate
+- Scan input folder for supported files (.pdf, .doc, .docx, .pptx, .xlsx)
+- Skip unsupported types
+
+2) Text extraction
+- .docx -> python-docx
+- .doc -> convert to .docx via LibreOffice (soffice), then python-docx
+- .pptx -> python-pptx
+- .xlsx -> openpyxl
+- .pdf -> pdfplumber
+  - If text is too short, OCR runs:
+    - OCRmyPDF (force OCR)
+    - If needed, Tesseract fallback
+  - OCR is used only for PDFs with low/empty extracted text
+  - OCR does not use the LLM; it is a separate local process
+
+3) PDF article splitting
+- PDFs are split into articles using heading heuristics
+- Article list used for per-article summaries
+
+4) Summarization + classification
+- Per document:
+  - Short summary (1–2 sentences)
+  - Long summary (5–7 sentences)
+  - Category (from your list)
+  - Tags
+- Per PDF article:
+  - Article summary (4–5 sentences, content-first)
+  - LLM is used here (summaries, category, tags, article summaries)
+
+5) Duplicate detection
+- Exact duplicates: SHA-256 hash
+- Near-duplicates: embeddings + cosine similarity
+  - Full text by default (can be changed to summary or disabled)
+  - Embeddings API is used here (only if embeddings are enabled)
+
+6) Outputs
+- *_docatlas_summaries.xlsx (summaries + tags + duplicates + file paths)
+- *_docatlas_full_text.xlsx (full extracted text + metadata)
+- summary_report.txt (counts, extraction status, token estimates, no-text list, file type breakdown, category %s, OCR usage, duplicate group stats, doc length stats, per-file errors)
+- Optional: resume.json + last_run_stats.json
+
+7) File organization
+- Move files into category folders
+- Duplicates go to <category>_Duplicate
+
+Potential cost/time points
+==========================
+- LLM calls (summaries, categories, tags, article summaries) are the main cost driver.
+- Embeddings calls (duplicate detection) add cost, especially with full text.
+- OCR adds time (CPU-heavy) but no API cost.
+- PDFs with many pages increase OCR time and token usage.
+- Large documents increase summarization time and LLM tokens.
+- Optional API delay (DOCATLAS_API_DELAY, seconds) can reduce transient socket errors on Windows.

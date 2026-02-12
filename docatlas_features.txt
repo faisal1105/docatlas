@@ -1,0 +1,72 @@
+DocAtlas Feature List
+=====================
+
+Input & Extraction
+- Supports .pdf, .doc, .docx, .pptx, .xlsx
+- .doc auto-converted to .docx via LibreOffice (if installed)
+- PDF extraction via pdfplumber
+- OCR for PDFs: OCRmyPDF (force OCR) -> Tesseract fallback
+- OCR of embedded images in .docx and .pptx when OCR is enabled
+- Extracts Word tables and Excel sheets
+- Extracts PowerPoint slide text
+
+Summarization & Classification (LLM)
+- Short summary (1–2 sentences)
+- Long summary (5–7 sentences)
+- Category assignment from your list
+- Tag generation (deduped + capped)
+- Article summaries for PDFs
+
+PDF Article Handling
+- Splits PDFs into articles by heading heuristics
+- Stores article summaries separately
+
+Duplicate Detection
+- Exact duplicates: SHA-256 hash
+- Near-duplicates: embeddings + cosine similarity
+- Embeddings source: full text (default), summary, or none
+
+Outputs
+- *_docatlas_summaries.xlsx
+- *_docatlas_full_text.xlsx
+- summary_report.txt
+- resume.json (cache)
+- last_run_stats.json (baseline for estimates)
+
+Organization
+- Moves files into category folders
+- Duplicates into <category>_Duplicate
+- Auto-rename if file name conflicts
+
+GUI
+- Folder pickers
+- Application/category dropdown + editor
+- OCR settings
+- Embeddings source + append/overwrite toggle
+- Progress bar + ETA
+- Pre-run runtime estimate popup (minutes/hours/days)
+
+CLI
+- Full CLI support for input/output/app/categories
+- --limit and --no-move for estimation runs
+- --overwrite-excel or append default
+- --no-resume, --no-ocrmypdf
+- --test-chat, --test-embeddings
+
+Reporting & Cost
+- Token estimates (chat + embeddings)
+- No-text file list
+- Extraction status counts
+- File type breakdown and category percentages
+- OCR usage count and duplicate group stats
+- Document length stats (avg/longest/shortest)
+- Errors captured per file and reported without stopping the run
+ - Optional API call delay (DOCATLAS_API_DELAY) to reduce transient socket errors
+
+Hidden/Internal Features
+- Auto-updated runtime baseline saved after every run
+- Quick estimate uses file count + size + baseline
+- Resume cache avoids reprocessing unchanged files
+- Short-text guard skips embeddings for tiny inputs
+- OCR logs note when OCR is triggered
+- File key based on path + mtime + size to detect changes

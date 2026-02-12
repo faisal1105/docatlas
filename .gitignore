@@ -1,0 +1,24 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.Python
+*.log
+*.tmp
+*.bak
+
+# Outputs
+docatlas.log
+summary_report.txt
+resume.json
+last_run_stats.json
+*_docatlas_summaries.xlsx
+*_docatlas_full_text.xlsx
+~$*_docatlas_summaries.xlsx
+~$*_docatlas_full_text.xlsx
+
+# Build artifacts
+dist/
+build/
+docatlas.spec
+
