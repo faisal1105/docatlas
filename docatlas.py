@@ -1547,20 +1547,29 @@ def write_excels(
     full_text_path = out_dir / f"{app_slug}__docatlas_full_text.xlsx"
 
     existing_docs_df = None
+    existing_dups_df = None
     existing_articles_df = None
     existing_full_df = None
     existing_doc_keys: set[str] = set()
+    existing_doc_paths: set[str] = set()
 
     if append_excel and peers_path.exists():
         try:
             existing_docs_df = pd.read_excel(peers_path, sheet_name="Documents")
             if "file_key" in existing_docs_df.columns:
                 existing_doc_keys = set(existing_docs_df["file_key"].astype(str))
-            elif "file_path" in existing_docs_df.columns:
-                existing_doc_keys = set(existing_docs_df["file_path"].astype(str))
+            if "file_path" in existing_docs_df.columns:
+                existing_doc_paths = set(existing_docs_df["file_path"].astype(str))
+            if "FilePath" in existing_docs_df.columns:
+                existing_doc_paths.update(existing_docs_df["FilePath"].astype(str))
         except Exception:
             existing_docs_df = None
             existing_doc_keys = set()
+            existing_doc_paths = set()
+        try:
+            existing_dups_df = pd.read_excel(peers_path, sheet_name="Duplicates")
+        except Exception:
+            existing_dups_df = None
         try:
             existing_articles_df = pd.read_excel(peers_path, sheet_name="Articles")
         except Exception:
@@ -1572,62 +1581,126 @@ def write_excels(
         except Exception:
             existing_full_df = None
 
-    docs_rows = []
-    new_doc_ids: set[str] = set()
+    docs_rows: List[Dict[str, Any]] = []
+    new_docs: List[DocRecord] = []
     for d in docs:
-        key = d.file_key or d.file_path
-        if append_excel and key in existing_doc_keys:
+        if append_excel and (d.file_key in existing_doc_keys or d.file_path in existing_doc_paths):
             continue
-        new_doc_ids.add(d.doc_id)
+        new_docs.append(d)
         docs_rows.append(
             {
-                "doc_id": d.doc_id,
-                "file_key": d.file_key,
-                "category": d.category,
-                "tags": ", ".join(d.tags),
-                "short_summary": d.short_summary,
-                "long_summary": d.long_summary,
-                "word_count": d.word_count,
-                "char_count": d.char_count,
-                "extraction_status": d.extraction_status,
-                "review_flags": d.review_flags,
-                "duplicate_of": d.duplicate_of,
-                "duplicate_score": d.duplicate_score,
-                "duplicate_group_id": d.duplicate_group_id,
-                "moved_to": d.moved_to,
-                "file_name": d.file_name,
-                "file_path": d.file_path,
+                "Category": d.category,
+                "FilePath": d.file_path,
+                "FileName": d.file_name,
+                "DuplicateOf": d.duplicate_of,
+                "DupScore": float(d.duplicate_score) if d.duplicate_score is not None else 0.0,
+                "LongSummary": d.long_summary,
+                "ShortSummary": d.short_summary,
+                "ReviewFlag": d.review_flags,
+                "ExtractionStatus": d.extraction_status,
+                "DuplicateClusterID": d.duplicate_group_id,
             }
         )
 
-    articles_rows = []
+    dup_rows: List[Dict[str, Any]] = []
+    for d in new_docs:
+        if not d.duplicate_group_id and not d.duplicate_of:
+            continue
+        dup_rows.append(
+            {
+                "DuplicateClusterID": d.duplicate_group_id,
+                "Category": d.category,
+                "FilePath": d.file_path,
+                "FileName": d.file_name,
+                "DupScore": float(d.duplicate_score) if d.duplicate_score is not None else 0.0,
+                "DuplicateOf": d.duplicate_of,
+                "ReviewFlag": d.review_flags,
+            }
+        )
+    dup_rows.sort(
+        key=lambda r: (
+            str(r.get("Category", "")).lower(),
+            str(r.get("DuplicateClusterID", "")).lower(),
+            -float(r.get("DupScore", 0.0)),
+        )
+    )
+
+    new_doc_ids = {d.doc_id for d in new_docs}
+    doc_by_id = {d.doc_id: d for d in docs}
+    article_rows: List[Dict[str, Any]] = []
     for a in articles:
         if append_excel and a.doc_id not in new_doc_ids:
             continue
-        articles_rows.append(
+        parent_doc = doc_by_id.get(a.doc_id)
+        article_rows.append(
             {
-                "doc_id": a.doc_id,
-                "file_key": a.file_key,
-                "article_index": a.article_index,
-                "article_title": a.article_title,
-                "article_summary": a.article_summary,
-                "duplicate_of": a.duplicate_of,
-                "duplicate_score": a.duplicate_score,
-                "duplicate_group_id": a.duplicate_group_id,
-                "file_name": a.file_name,
-                "file_path": a.file_path,
+                "Category": parent_doc.category if parent_doc else "",
+                "FilePath": a.file_path,
+                "FileName": a.file_name,
+                "ParentDocID": a.doc_id,
+                "ArticleIndex": a.article_index,
+                "ArticleTitle": a.article_title,
+                "ArticleSummary": a.article_summary,
+                "DuplicateClusterID": a.duplicate_group_id,
+                "DupScore": float(a.duplicate_score) if a.duplicate_score is not None else 0.0,
+                "DuplicateOf": a.duplicate_of,
             }
         )
+    article_rows.sort(
+        key=lambda r: (
+            str(r.get("Category", "")).lower(),
+            str(r.get("FileName", "")).lower(),
+            int(r.get("ArticleIndex", 0)),
+        )
+    )
 
-    docs_df = sanitize_excel_df(pd.DataFrame(docs_rows))
-    articles_df = sanitize_excel_df(pd.DataFrame(articles_rows))
+    docs_columns = [
+        "Category",
+        "FilePath",
+        "FileName",
+        "DuplicateOf",
+        "DupScore",
+        "LongSummary",
+        "ShortSummary",
+        "ReviewFlag",
+        "ExtractionStatus",
+        "DuplicateClusterID",
+    ]
+    dups_columns = [
+        "DuplicateClusterID",
+        "Category",
+        "FilePath",
+        "FileName",
+        "DupScore",
+        "DuplicateOf",
+        "ReviewFlag",
+    ]
+    articles_columns = [
+        "Category",
+        "FilePath",
+        "FileName",
+        "ParentDocID",
+        "ArticleIndex",
+        "ArticleTitle",
+        "ArticleSummary",
+        "DuplicateClusterID",
+        "DupScore",
+        "DuplicateOf",
+    ]
+
+    docs_df = sanitize_excel_df(pd.DataFrame(docs_rows, columns=docs_columns))
+    dups_df = sanitize_excel_df(pd.DataFrame(dup_rows, columns=dups_columns))
+    articles_df = sanitize_excel_df(pd.DataFrame(article_rows, columns=articles_columns))
     if append_excel and existing_docs_df is not None:
         docs_df = pd.concat([existing_docs_df, docs_df], ignore_index=True)
+    if append_excel and existing_dups_df is not None:
+        dups_df = pd.concat([existing_dups_df, dups_df], ignore_index=True)
     if append_excel and existing_articles_df is not None:
         articles_df = pd.concat([existing_articles_df, articles_df], ignore_index=True)
 
     with pd.ExcelWriter(peers_path, engine="openpyxl") as writer:
         docs_df.to_excel(writer, index=False, sheet_name="Documents")
+        dups_df.to_excel(writer, index=False, sheet_name="Duplicates")
         articles_df.to_excel(writer, index=False, sheet_name="Articles")
 
     # Expand full_text parts into separate columns to avoid Excel 32,767 char limit
@@ -1646,11 +1719,11 @@ def write_excels(
             row[key] = parts[i] if i < len(parts) else ""
 
     full_df = sanitize_excel_df(pd.DataFrame(expanded_rows))
-    if append_excel and existing_doc_keys:
-        if "file_key" in full_df.columns:
+    if append_excel and (existing_doc_keys or existing_doc_paths):
+        if "file_key" in full_df.columns and existing_doc_keys:
             full_df = full_df[~full_df["file_key"].astype(str).isin(existing_doc_keys)]
-        elif "file_path" in full_df.columns:
-            full_df = full_df[~full_df["file_path"].astype(str).isin(existing_doc_keys)]
+        if "file_path" in full_df.columns and existing_doc_paths:
+            full_df = full_df[~full_df["file_path"].astype(str).isin(existing_doc_paths)]
     if append_excel and existing_full_df is not None:
         full_df = pd.concat([existing_full_df, full_df], ignore_index=True)
 
@@ -1698,7 +1771,9 @@ def write_excels(
 
             wb.save(path)
 
-        format_sheet(peers_path, "Documents", ["short_summary", "long_summary"])
+        format_sheet(peers_path, "Documents", ["LongSummary", "ShortSummary", "FilePath"])
+        format_sheet(peers_path, "Duplicates", ["FilePath"])
+        format_sheet(peers_path, "Articles", ["FilePath", "ArticleTitle", "ArticleSummary"])
         format_sheet(full_text_path, "FullText", ["short_summary", "long_summary", "full_text"])
     except Exception:
         pass
@@ -2228,8 +2303,9 @@ def run_pipeline(
                 progress_cb("Moving files", i - 1, len(docs))
             src = Path(d.file_path)
             cat_folder = sanitize_folder(d.category)
-            if d.duplicate_of:
-                dest_dir = output_dir / f"{cat_folder}_Duplicate"
+            if d.duplicate_group_id or d.duplicate_of:
+                cluster_id = sanitize_folder(d.duplicate_group_id or f"OF_{d.duplicate_of or 'UNCLUSTERED'}")
+                dest_dir = output_dir / f"{cat_folder}_Duplicate" / cluster_id
             else:
                 dest_dir = output_dir / cat_folder
             dest_dir.mkdir(parents=True, exist_ok=True)
@@ -2689,8 +2765,9 @@ def run_pipeline_parallel(
         for d in docs:
             src = Path(d.file_path)
             cat_folder = sanitize_folder(d.category)
-            if d.duplicate_of:
-                dest_dir = output_dir / f"{cat_folder}_Duplicate"
+            if d.duplicate_group_id or d.duplicate_of:
+                cluster_id = sanitize_folder(d.duplicate_group_id or f"OF_{d.duplicate_of or 'UNCLUSTERED'}")
+                dest_dir = output_dir / f"{cat_folder}_Duplicate" / cluster_id
             else:
                 dest_dir = output_dir / cat_folder
             dest_dir.mkdir(parents=True, exist_ok=True)
