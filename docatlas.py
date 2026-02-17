@@ -17,6 +17,7 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 import tempfile
@@ -593,7 +594,11 @@ def convert_doc_to_docx(path: Path) -> Optional[Path]:
             candidates = list(out_dir.glob("*.docx"))
             if not candidates:
                 return None
-            return candidates[0]
+            fd, temp_path = tempfile.mkstemp(suffix=".docx")
+            os.close(fd)
+            target = Path(temp_path)
+            shutil.copy2(candidates[0], target)
+            return target
     except Exception as exc:
         logging.exception("Failed to convert %s: %s", path, exc)
         return None
@@ -621,7 +626,11 @@ def convert_ppt_to_pptx(path: Path) -> Optional[Path]:
             candidates = list(out_dir.glob("*.pptx"))
             if not candidates:
                 return None
-            return candidates[0]
+            fd, temp_path = tempfile.mkstemp(suffix=".pptx")
+            os.close(fd)
+            target = Path(temp_path)
+            shutil.copy2(candidates[0], target)
+            return target
     except Exception as exc:
         logging.exception("Failed to convert %s: %s", path, exc)
         return None
@@ -1488,7 +1497,13 @@ def process_file(path: Path, ocrmypdf_enabled: bool) -> Tuple[str, List[Tuple[st
         docx_path = convert_doc_to_docx(path)
         if docx_path is None:
             return "", [], "no_text_doc_convert_failed"
-        text = extract_text_docx(docx_path, ocrmypdf_enabled)
+        try:
+            text = extract_text_docx(docx_path, ocrmypdf_enabled)
+        finally:
+            try:
+                docx_path.unlink(missing_ok=True)
+            except Exception:
+                pass
         status = "ok" if len(text.strip()) >= MIN_EXTRACTED_CHARS else "no_text"
         return text, [], status
     if ext == ".pptx":
@@ -1499,7 +1514,13 @@ def process_file(path: Path, ocrmypdf_enabled: bool) -> Tuple[str, List[Tuple[st
         pptx_path = convert_ppt_to_pptx(path)
         if pptx_path is None:
             return "", [], "no_text_ppt_convert_failed"
-        text = extract_text_pptx(pptx_path, ocrmypdf_enabled)
+        try:
+            text = extract_text_pptx(pptx_path, ocrmypdf_enabled)
+        finally:
+            try:
+                pptx_path.unlink(missing_ok=True)
+            except Exception:
+                pass
         status = "ok" if len(text.strip()) >= MIN_EXTRACTED_CHARS else "no_text"
         return text, [], status
     if ext == ".xlsx":
@@ -2300,8 +2321,6 @@ def run_pipeline(
         )
         est_10k = (elapsed / max(len(files), 1)) * 10000
         logging.info("Estimate for 10000 files: ~%ss", int(est_10k))
-        est_10k = (elapsed / max(len(files), 1)) * 10000
-        logging.info("Estimate for 10000 files: ~%ss", int(est_10k))
 
 
 def run_pipeline_parallel(
@@ -2505,7 +2524,7 @@ def run_pipeline_parallel(
                 with errors_lock:
                     errors.append({"stage": "summarize_worker", "file_name": "", "file_path": "", "error": str(exc)})
                 continue
-            doc_id = f"DOC-{idx:05d}"
+            doc_id = resume_files.get(file_key(path), {}).get("doc_id", f"{run_id}-DOC-{idx:05d}")
             summaries[doc_id] = summary
 
     for idx, path in enumerate(files, start=1):
@@ -2780,11 +2799,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--signal-scan", action="store_true", help="Deprecated alias for --charter-mode")
     parser.add_argument("--test-embeddings", action="store_true", help="Test embeddings endpoint and exit")
     parser.add_argument("--test-chat", action="store_true", help="Test chat endpoint and exit")
+    parser.add_argument("--workers", type=int, default=1, help="Number of workers for parallel CLI processing (default: 1)")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    if args.workers < 1:
+        raise ValueError("--workers must be >= 1")
     config_path = Path(args.config) if args.config else Path(__file__).with_name("applications.json")
     app_config = load_app_config(config_path)
     is_gui_flow = not (args.input and args.output and (args.categories or args.app))
@@ -2983,20 +3005,37 @@ def main() -> int:
         poll()
         progress_root.mainloop()
     else:
-        run_pipeline(
-            input_dir,
-            output_dir,
-            categories,
-            cfg,
-            args.dry_run,
-            not args.no_resume,
-            ocrmypdf_enabled,
-            app_name,
-            embeddings_source,
-            append_excel,
-            args.limit,
-            args.no_move,
-        )
+        if args.workers > 1:
+            run_pipeline_parallel(
+                input_dir,
+                output_dir,
+                categories,
+                cfg,
+                args.dry_run,
+                not args.no_resume,
+                ocrmypdf_enabled,
+                app_name,
+                embeddings_source,
+                append_excel,
+                args.workers,
+                args.limit,
+                args.no_move,
+            )
+        else:
+            run_pipeline(
+                input_dir,
+                output_dir,
+                categories,
+                cfg,
+                args.dry_run,
+                not args.no_resume,
+                ocrmypdf_enabled,
+                app_name,
+                embeddings_source,
+                append_excel,
+                args.limit,
+                args.no_move,
+            )
     return 0
 
 
